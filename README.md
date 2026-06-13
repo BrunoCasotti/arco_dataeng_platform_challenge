@@ -40,7 +40,7 @@ Este pipeline automatiza o processo completo de **ELT (Extract, Load, Transform)
 | **Streaming download** | ZIPs de ~2GB+ não cabem na RAM. O download é feito via `requests.iter_content()`, gravando direto em disco. |
 | **`tempfile.mkdtemp()`** | Diretório temporário portável entre Windows, Linux, macOS e WSL. Sem caminhos hardcoded. |
 | **Chunks de 50k linhas** | Controla consumo de memória. Funciona em ambientes com apenas 4GB de RAM (ex: WSL). Configurável via `.env`. |
-| **Filtro por UF (SP)** | Reduz volume de dados em ~95%. Os microdados completos têm 50M+ de matrículas; SP tem ~10M. |
+| **Escala Nacional** | O pipeline processa dados de todas as UF's do Brasil em uma única rodada (filtro desativado). |
 | **Staging + Raw (3 camadas)** | Staging permite reprocessamento; Raw com UPSERT garante idempotência; Analytics gera métricas limpas. |
 | **UPSERT com chave composta** | `(CO_ENTIDADE, NU_ANO_CENSO)` garante que re-execuções não dupliquem dados. |
 | **SQLAlchemy 2.0+** | API moderna com tipagem, connection pooling e compatibilidade com Supabase. |
@@ -154,7 +154,7 @@ python main.py
 O pipeline executará automaticamente:
 1. ✅ Criação de schemas e tabelas no Supabase
 2. ✅ Download dos microdados mais recentes do INEP
-3. ✅ Carga em chunks, filtro SP, UPSERT para raw
+3. ✅ Carga massiva em chunks (Nacional) com UPSERT para raw
 4. ✅ Criação das views analíticas
 
 ---
@@ -171,7 +171,7 @@ arco_dataeng_platform_challenge/
 │   └── load.py              # CSV → Staging (chunks) → Raw (UPSERT)
 ├── sql/
 │   ├── ddl.sql              # CREATE SCHEMA + CREATE TABLE
-│   └── transformations.sql  # Views analíticas (6 views)
+│   └── transformations.sql  # Wide Table Analítica (Mestra)
 ├── main.py                  # Orquestrador principal
 ├── .env.example             # Template de variáveis de ambiente
 ├── requirements.txt         # Dependências (Python >= 3.10)
@@ -183,24 +183,39 @@ arco_dataeng_platform_challenge/
 
 ## 📈 Métricas Geradas
 
-As seguintes views são criadas no schema `analytics`:
+O pipeline consolida todos os dados do país em uma única **Wide Table** (View Mestra) no schema `analytics`:
 
 | View | Descrição |
 |---|---|
-| `vw_escolas_por_uf_dependencia` | Escolas por UF e dependência administrativa (Federal, Estadual, Municipal, Privada) |
-| `vw_escolas_por_localizacao` | Escolas por localização (Urbana/Rural) por UF |
-| `vw_escolas_infraestrutura` | % de escolas com internet, água, energia e acessibilidade |
-| `vw_turmas_por_escola_uf` | Total de turmas e média de turmas por escola, por UF |
-| `vw_matriculas_por_dependencia` | **[Bônus]** Total de matrículas por dependência administrativa |
-| `vw_razao_alunos_turma` | **[Bônus]** Razão alunos por turma |
+| `vw_censo_escolar_agregado` | Consolida agrupamentos por Ano, UF, Dependência Administrativa e Localização. Calcula totais, % de infraestrutura exigidas, médias e razões bônus (como escolas conectadas e alunos/turma). |
 
-### Exemplo de consulta
+### Amostra Visual no Terminal
 
-```sql
--- Top UFs por % de escolas com internet
-SELECT sg_uf, pct_internet, pct_agua_potavel, pct_energia, pct_acessibilidade
-FROM analytics.vw_escolas_infraestrutura
-ORDER BY pct_internet DESC;
+Ao final do pipeline, o Python automaticamente puxa os **Top 3 resultados** do banco e imprime na tela. Exemplo de saída:
+
+```text
+📊 AMOSTRA DOS DADOS ANALÍTICOS (TOP 3):
+
+🏆 RANK 1 ---
+  nu_ano_censo             : 2025
+  sg_uf                    : SP
+  ds_dependencia           : Estadual
+  ds_localizacao           : Urbana
+  total_escolas            : 5320
+  total_turmas             : 145890
+  total_matriculas         : 4580000
+  pct_com_internet         : 99.80
+  pct_com_banda_larga      : 98.50
+  pct_com_agua_potavel     : 100.00
+  pct_com_energia          : 99.90
+  pct_com_acessibilidade   : 75.40
+  pct_escolas_conectadas   : 98.40
+  media_turmas_escola      : 27.42
+  media_alunos_escola      : 860.90
+  razao_alunos_turma       : 31.39
+
+🏆 RANK 2 ---
+  ...
 ```
 
 ---
