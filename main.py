@@ -81,6 +81,24 @@ def main() -> None:
     logger.info("✅ PIPELINE CONCLUÍDO COM SUCESSO!")
     logger.info(f"   Tempo total: {minutes}m {seconds}s")
     logger.info("=" * 60)
+    
+    # AMOSTRA DOS DADOS
+    try:
+        import pandas as pd
+        logger.info("📊 AMOSTRA DOS DADOS ANALÍTICOS (TOP 3):")
+        df_top3 = pd.read_sql(
+            "SELECT * FROM analytics.vw_censo_escolar_agregado LIMIT 3", 
+            get_engine()
+        )
+        records = df_top3.to_dict(orient="records")
+        for i, row in enumerate(records, 1):
+            print(f"\n🏆 RANK {i} ---")
+            for k, v in row.items():
+                print(f"  {k:25}: {v}")
+        print()
+        logger.info("=" * 60)
+    except Exception as e:
+        logger.warning(f"Não foi possível exibir a amostra: {e}")
 
 
 def _run_transformations(engine, logger) -> None:
